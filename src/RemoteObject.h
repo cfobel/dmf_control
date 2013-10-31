@@ -153,12 +153,19 @@ public:
                  );
   ~RemoteObject();
 
-  uint8_t return_code() { return return_code_; }
-  bool crc_enabled() { return crc_enabled_; }
+  /* Read/parse any bytes that are available on the serial-rx-stream. */
   void Listen();
+  // TODO: When is this used?  What effect does it have?
   void SendInterrupt();
+
+  // Accessors
+  bool crc_enabled() { return crc_enabled_; }
   uint16_t bytes_read() { return bytes_read_; }
-  bool waiting_for_reply() { Listen(); return waiting_for_reply_to_>0; }
+  uint8_t return_code() { return return_code_; }
+  bool waiting_for_reply() {
+      Listen();
+      return waiting_for_reply_to_ > 0;
+  }
 
 #ifdef AVR
   virtual void begin();
@@ -174,14 +181,11 @@ public:
   virtual const char* hardware_version() = 0;
   virtual const char* url() = 0;
   void i2c_write(const uint8_t address, const uint8_t data);
-  void i2c_write(const uint8_t address,
-                 const uint8_t* data,
+  void i2c_write(const uint8_t address, const uint8_t* data,
                  const uint8_t n_bytes);
   uint8_t i2c_read(const uint8_t address, uint8_t* data,
                    const uint8_t n_bytes_to_read);
-  uint8_t i2c_send_command(uint8_t address,
-                           uint8_t cmd,
-                           uint8_t* data,
+  uint8_t i2c_send_command(uint8_t address, uint8_t cmd, uint8_t* data,
                            uint8_t delay_ms);
 #else
   virtual std::string host_name() = 0;
@@ -209,26 +213,30 @@ public:
   std::string hardware_version();
   /**\brief Get the remote device's url.*/
   std::string url();
+
   std::vector<uint8_t> debug_buffer();
   void set_pin_mode(uint8_t pin, bool mode);
+
   uint8_t digital_read(uint8_t pin);
   void digital_write(uint8_t pin, bool value);
+
   uint16_t analog_read(uint8_t pin);
   std::vector<uint16_t> analog_reads(uint8_t pin,
                                      uint16_t n_samples);
   void analog_write(uint8_t pin, uint16_t value);
+
   uint8_t eeprom_read(uint16_t address);
   void eeprom_write(uint16_t address, uint8_t value);
+
   std::vector<uint8_t> onewire_address(uint8_t pin, uint8_t index);
   std::vector<uint8_t> onewire_read(uint8_t pin, std::vector<uint8_t> address,
                                     uint8_t command, uint8_t n_bytes);
   void onewire_write(uint8_t pin, std::vector<uint8_t> address,
                      uint8_t value, uint8_t power);
+
   void i2c_write(uint8_t address, std::vector<uint8_t> data);
-  std::vector<uint8_t> i2c_read(uint8_t address,
-                                uint8_t n_bytes_to_read);
-  std::vector<uint8_t> i2c_send_command(uint8_t address,
-                                        uint8_t cmd,
+  std::vector<uint8_t> i2c_read(uint8_t address, uint8_t n_bytes_to_read);
+  std::vector<uint8_t> i2c_send_command(uint8_t address, uint8_t cmd,
                                         std::vector<uint8_t> data,
                                         uint8_t delay_ms);
 
