@@ -23,20 +23,34 @@ Each packet has the following structure:
 
 Commands are uint8_t and should have the MSB=1 (replies have MSB=0). The
 RemoteObject base class reserves the commands 0x80 to 0x9F, while derived
-classes should restrict themselves to commands in the range 0xA0 to 0xFF. 
+classes should restrict themselves to commands in the range 0xA0 to 0xFF.
 
 The payload length can be one or two bytes.  If the payload is less than 128
 bytes, it's length is expressed as a single byte.  If the most-significant
 bit is set, the length is expressed as two bytes and can be recovered by
-clearing the most significant byte (i.e. PAYLOAD_LENGTH & 0x7FFF).
+clearing the most significant bit (i.e. PAYLOAD_LENGTH & 0x7FFF).
 
 <b>Examples:</b>
    - payload length of 3, one byte: 0x04
    - payload length of 512, two bytes: 0x82 0x01
 
+The following [ABNF][1] grammar defines a packet:
+<pre>
+    packet = start_flag command payload_length payload [crc] end_flag
+
+    start_flag = %x7E
+    command = %x80-FF
+    payload_length = %x00-7F / (%x80-FF OCTET)
+    payload = *OCTET
+    crc = 2OCTET
+    end_flag = %x7E
+</pre>
+
 Total packet length (not including flags) = Header Length (2-3 bytes)
                                             + Payload Length
                                             (+ 2 if CRC is enabled)
+
+[1]: http://en.wikipedia.org/wiki/Augmented_Backus%E2%80%93Naur_Form
 
 To use this class, you must derive a class based on it and reimplement the
 virtual member function ProcessCommand().
@@ -44,7 +58,7 @@ virtual member function ProcessCommand().
 /*
 __________________________________________________________________________
 
-Copyright 2011 Ryan Fobel
+Copyright 2011 Ryan Fobel, 2013 Christian Fobel
 
 This file is part of dmf_control_board.
 
@@ -65,7 +79,7 @@ __________________________________________________________________________
 */
 
 #ifndef _REMOTE_OBJECT_H
-#define	_REMOTE_OBJECT_H
+#define _REMOTE_OBJECT_H
 
 #include <stdint.h>
 
@@ -118,7 +132,7 @@ public:
   static const uint8_t CMD_SPI_SET_DATA_MODE =        0x95;
   static const uint8_t CMD_SPI_TRANSFER =             0x96;
   static const uint8_t CMD_GET_DEBUG_BUFFER =         0x97;
-  
+
   // reserved return codes
   static const uint8_t RETURN_OK =                    0x00;
   static const uint8_t RETURN_GENERAL_ERROR =         0x01;
@@ -238,7 +252,7 @@ public:
     SPI_CLOCK_DIV16,
     SPI_CLOCK_DIV32,
     SPI_CLOCK_DIV64, or
-    SPI_CLOCK_DIV128 
+    SPI_CLOCK_DIV128
   \returns None
   */
   void spi_set_clock_divider(uint8_t divider);
@@ -248,10 +262,10 @@ public:
   the Wikipedia article on SPI</a> for details.
   \param mode SPI_MODE0, SPI_MODE1, SPI_MODE2, or SPI_MODE3
   \returns None
-  \sa spi_set_bit_order() 
+  \sa spi_set_bit_order()
   */
   void spi_set_data_mode(uint8_t mode);
-  
+
   /**Transfers one byte over the SPI bus, both sending and receiving.
   \param value the byte to send out over the bus
   \returns the byte read from the bus
@@ -259,7 +273,7 @@ public:
   uint8_t spi_transfer(uint8_t value);
 
   void set_debug(const bool debug);
-  bool connected() { return Serial.isOpen(); }  
+  bool connected() { return Serial.isOpen(); }
   uint8_t Connect(const char* port);
   uint8_t Disconnect() { Serial.end(); return RETURN_OK; }
   void flush() { Serial.flush(); }

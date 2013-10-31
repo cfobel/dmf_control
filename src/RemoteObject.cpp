@@ -1,5 +1,5 @@
 /*
-Copyright 2011 Ryan Fobel
+Copyright 2011 Ryan Fobel, 2013 Christian Fobel
 
 This file is part of dmf_control_board.
 
@@ -640,121 +640,185 @@ uint8_t RemoteObject::ProcessCommand(uint8_t cmd) {
   return return_code_;
 }
 
-void RemoteObject::ProcessSerialInput(uint8_t b) {
+void RemoteObject::ProcessSerialInput(uint8_t byte) {
+    /*
+     * Process the next available _byte_ in the serial receive buffer.
+     */
 #ifndef AVR
-  const char* function_name = "ProcessSerialInput()";
+    const char* function_name = "ProcessSerialInput()";
 #endif
-  // deal with escapes
-  if (b==CONTROL_ESCAPE) {
+    /* Since the packet grammar defined in `Remoteobject.h` reserves certain byte
+     * values as special markers _(e.g., `start_flag`, `end_flag`), we provide a
+     * mechanism to [escape][1] a reserved byte value, such that it can be
+     * included in a packet's payload without disrupting the processing of the
+     * packet.  To do this, we allow reserved byte values to be prepended by an
+     * [escape character][1] with the value `CONTROL_ESCAPE`.
+     *
+     * [1]: http://en.wikipedia.org/wiki/Escape_character
+     */
+    if (byte ==CONTROL_ESCAPE) {
 #ifndef AVR
-    LogMessage(str(format("(0x%0X) Escape") % (int)b).c_str(), function_name);
+        LogMessage(str(format("(0x%0X) Escape") % (int)byte ).c_str(), function_name);
 #endif
-    un_escaping_ = true;
-    return;
-  } else if(un_escaping_) {
-    b^=ESCAPE_XOR;
+        /* Update our state to indicate that we are currently processing an [escape
+         * character][1] sequence and will need to return to normal processing for
+         * the next byte.
+         *
+         * [1]: http://en.wikipedia.org/wiki/Escape_character
+         */
+        un_escaping_ = true;
+        return;
+    } else if(un_escaping_) {
+        /* TODO: What does `ESCAPE_XOR` do? */
+        byte ^= ESCAPE_XOR;
 #ifndef AVR
-    LogMessage(str(format("(0x%0X) Un-escaping") % (int)b).c_str(), function_name);
-#endif
-  }
-  if (b==FRAME_BOUNDARY && !un_escaping_) {
-#ifndef AVR
-    LogSeparator();
-    LogMessage(str(format("(0x%0X) Frame Boundary") % (int)b).c_str(),
-      function_name);
-#endif
-    if(bytes_received_>0) {
-#ifndef AVR
-      LogMessage(str(format("(0x%0X) Invalid packet") % (int)b).c_str(),
-        function_name);
+        LogMessage(str(format("(0x%0X) Un-escaping") % (int)byte).c_str(), function_name);
 #endif
     }
-    bytes_received_ = 0;
-  } else {
-    if(bytes_received_==0) { // command byte
+
+    if (byte==FRAME_BOUNDARY && !un_escaping_) {
+        /* The current byte marks a frame-boundary, since it matches the
+         * `start_flag` or `end_flag` of the packet grammar defined in
+         * `Remoteobject.h`.
+         *
+         * __NB__ If `un_escaping_` is `true`, it would indicate that the previous
+         * byte was an [escape character][1] and that the current byte has been
+         * XOR'ed with `ESCAPE_XOR` to ensure it does not conflict with one of the
+         * reserved byte values.  Therefore, if the previous character was an
+         * escape character and the current byte _(which has been XOR'ed with
+         * `ESCAPE_XOR`)_ is equal to the `FRAME_BOUNDARY`, we should not actually
+         * treat it as a `FRAME_BOUNDARY`.
+         *
+         * [1]: http://en.wikipedia.org/wiki/Escape_character
+         */
 #ifndef AVR
-      LogMessage(str(format("(0x%0X) Command byte (%d)") % (int)b % (int)b).c_str(),
-        function_name);
+        LogSeparator();
+        LogMessage(str(format("(0x%0X) Frame Boundary") % (int)byte).c_str(),
+          function_name);
 #endif
-      packet_cmd_=b;
-      if(crc_enabled_) {
-        rx_crc_=0xFFFF; // reset the crc
-      }
-    } else if(bytes_received_==1) { // payload length
-      if(b & 0x80) {
-        header_length_=3;
-        payload_length_=(b&0x7F)<<8;
-      } else {
-        header_length_=2;
-        payload_length_=b;
-      }
-    // payload length (byte 2)
-    } else if(bytes_received_==2 && header_length_==3) {
-      payload_length_+=b;
-    } else if(bytes_received_-header_length_<payload_length_) { // payload
-      // TODO: check that MAX_PAYLOAD_LENGTH isn't exceeded
-      payload_[bytes_received_-header_length_]=b;
-    } else if(bytes_received_-header_length_<payload_length_+2) { // crc
-    } else {
-      // TODO: error
-    }
+        if(bytes_received_ > 0) {
 #ifndef AVR
-    if(bytes_received_==header_length_) {
-      LogMessage(str(format("Payload length=%d") % payload_length_).c_str(),
-        function_name);
-    }
-#endif
-    if(crc_enabled_) {
-      rx_crc_ = UpdateCrc(rx_crc_, b);
-    }
-    bytes_received_++;
-#ifndef AVR
-    if(b>=0x20&&b<=0x7E) {
-      LogMessage(str(format("(0x%0X) %d bytes received (\'%c\')") % (int)b %
-        bytes_received_ % b).c_str(), function_name);
-    } else {
-      LogMessage(str(format("(0x%0X) %d bytes received") % (int)b %
-        bytes_received_).c_str(), function_name);
-    }
-#endif
-    if(bytes_received_==payload_length_+header_length_+2*crc_enabled_) {
-      bytes_received_ = 0;
-      bytes_read_ = 0;
-      bytes_written_ = 0;
-      if(crc_enabled_) {
-        if(rx_crc_==0) {
-#ifndef AVR
-          LogMessage("End of Packet. CRC OK.", function_name);
-#endif
-          ProcessPacket();
-        } else {
-#ifndef AVR
-          LogMessage("End of Packet. CRC Error.", function_name);
+            /* Since our current processing state indicates that we have already
+             * received some bytes, we are not expecting a `FRAME_BOUNDARY`, so
+             * log the packet as invalid.
+             */
+            LogMessage(str(format("(0x%0X) Invalid packet") % (int)byte).c_str(),
+                       function_name);
 #endif
         }
-      } else {
+        bytes_received_ = 0;
+    } else {
+        if(bytes_received_ == 0) { // command byte
 #ifndef AVR
-        LogMessage("End of Packet", function_name);
+            LogMessage(str(format("(0x%0X) Command byte (%d)") % (int)byte %
+                                  (int)byte).c_str(), function_name);
 #endif
-        ProcessPacket();
-      }
+            packet_cmd_=byte;
+            if(crc_enabled_) {
+                rx_crc_=0xFFFF; // reset the crc
+            }
+        } else if(bytes_received_==1) { // payload length
+            if(byte & 0x80) {
+                header_length_=3;
+                payload_length_=(byte&0x7F)<<8;
+            } else {
+                header_length_=2;
+                payload_length_=byte;
+            }
+        // payload length (byte 2)
+        } else if(bytes_received_==2 && header_length_==3) {
+            payload_length_+=byte;
+        } else if(bytes_received_-header_length_<payload_length_) { // payload
+            // TODO: check that MAX_PAYLOAD_LENGTH isn't exceeded
+            payload_[bytes_received_-header_length_]=byte;
+        } else if(bytes_received_-header_length_<payload_length_+2) { // crc
+        } else {
+          // TODO: error
+        }
 #ifndef AVR
-      LogSeparator();
+        if(bytes_received_ == header_length_) {
+            /* We've received all header bytes, so we can report the
+             * payload-length _(which was included in the packet header)_. */
+            LogMessage(str(format("Payload length=%d") %
+                                  payload_length_).c_str(), function_name);
+        }
 #endif
-      // if we're not expecting something else, stop waiting
-      if(waiting_for_reply_to_ && packet_cmd_==(waiting_for_reply_to_^0x80)) {
-        waiting_for_reply_to_ = 0;
-      }
+        if(crc_enabled_) {
+            /* CRC is enabled, so update the CRC-checksum with the current
+             * byte. */
+            rx_crc_ = UpdateCrc(rx_crc_, byte);
+        }
+        bytes_received_++;
 #ifndef AVR
-      else {
-        LogMessage("Not the expected reply, keep waiting.", function_name);
-      }
+        if(byte >= 0x20 && byte <= 0x7E) {
+            /* The byte value is within the [ASCII][1] character range, so
+             * display the corresponding character.
+             *
+             * [1]: http://www.asciitable.com */
+            LogMessage(str(format("(0x%0X) %d bytes received (\'%c\')") % (int)byte
+                                  % bytes_received_ % byte).c_str(),
+                       function_name);
+        } else {
+            LogMessage(str(format("(0x%0X) %d bytes received") % (int)byte %
+                                  bytes_received_).c_str(), function_name);
+        }
 #endif
+        if (bytes_received_ ==
+            payload_length_ + header_length_ + 2 * crc_enabled_) {
+            /* We have read the number of bytes that make up a packet,
+             * according to the grammar defined in `RemoteObject.h`, so process
+             * the packet contents.
+             *
+             * __NB__ Recall that the length of a packet varies according to
+             * whether or not a CRC-value is provided.  This is taken into
+             * account here by including the `2 * crc_enabled_` term in the
+             * condition above.  In the case where CRC-checking is not enabled,
+             * the term will evaluate to 0.
+             */
+            bytes_received_ = 0;
+            bytes_read_ = 0;
+            bytes_written_ = 0;
+            if(crc_enabled_) {
+                /* CRC checking is enabled, so verify that the CRC matches the
+                 * CRC value sent in the packet. */
+                if(rx_crc_ == 0) {
+#ifndef AVR
+                    LogMessage("End of Packet. CRC OK.", function_name);
+#endif
+                    ProcessPacket();
+                } else {
+#ifndef AVR
+                    LogMessage("End of Packet. CRC Error.", function_name);
+#endif
+                }
+            } else {
+                /* CRC checking is not enabled, so just proceed with processing
+                 * the packet contents. */
+#ifndef AVR
+                LogMessage("End of Packet", function_name);
+#endif
+                ProcessPacket();
+            }
+#ifndef AVR
+            LogSeparator();
+#endif
+            // If we're not expecting something else, stop waiting
+            if (waiting_for_reply_to_ &&
+                packet_cmd_ == (waiting_for_reply_to_ ^ 0x80)) {
+                waiting_for_reply_to_ = 0;
+            }
+#ifndef AVR
+            else {
+                LogMessage("Not the expected reply, keep waiting.", function_name);
+            }
+#endif
+        }
     }
-  }
-  if(un_escaping_) {
-    un_escaping_=false;
-  }
+    if(un_escaping_) {
+        /* If we were handling the escaping of a byte, reset the escaping state
+         * to resume normal packet processing. */
+        un_escaping_=false;
+    }
 }
 
 void RemoteObject::Listen() {
@@ -829,7 +893,7 @@ uint8_t RemoteObject::Connect(const char* port) {
   // wait up to 10 s for the Arduino to send something on the
   // serial port so that we know it's ready
   if(return_code==0) {
-    boost::posix_time::ptime t = 
+    boost::posix_time::ptime t =
       boost::posix_time::microsec_clock::universal_time();
     while(Serial.available()==false && \
       (boost::posix_time::microsec_clock::universal_time()-t)
@@ -1234,7 +1298,7 @@ uint8_t RemoteObject::spi_transfer(uint8_t value) {
     uint8_t data = ReadUint8();
     LogMessage(str(format("sent: %d, received: %d") % value % data).c_str(),
       function_name);
-    return data;  
+    return data;
   }
   return 0;
 }
