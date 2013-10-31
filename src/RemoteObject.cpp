@@ -49,48 +49,49 @@ RemoteObject::RemoteObject(uint32_t baud_rate,
                                 ,class_name_(class_name)
 #endif
                                 {
-  bytes_received_ = 0;
-  un_escaping_ = false;
-  payload_length_ = 0;
-  bytes_read_ = 0;
-  bytes_written_ = 0;
-  debug_ = false;
+    bytes_received_ = 0;
+    un_escaping_ = false;
+    payload_length_ = 0;
+    bytes_read_ = 0;
+    bytes_written_ = 0;
+    debug_ = false;
 
 #ifdef AVR
-  // initialize pin mode and state of digital pins
-  // from EEPROM
-  for(uint8_t i=0; i<=54/8; i++) {
-    uint8_t mode = EEPROM.read(EEPROM_PIN_MODE_ADDRESS+i);
-    uint8_t state = EEPROM.read(EEPROM_PIN_STATE_ADDRESS+i);
-    for(uint8_t j=0; j<8; j++) {
-      if(i*8+j<54) {
-        pinMode(i*8+j,(~mode>>j)&0x01);
-        digitalWrite(i*8+j,(~state>>j)&0x01);
-      }
+    // initialize pin mode and state of digital pins
+    // from EEPROM
+    for (uint8_t i = 0; i <= 54 / 8; i++) {
+        uint8_t mode = EEPROM.read(EEPROM_PIN_MODE_ADDRESS + i);
+        uint8_t state = EEPROM.read(EEPROM_PIN_STATE_ADDRESS + i);
+        for (uint8_t j = 0; j < 8; j++) {
+            if(i * 8 + j < 54) {
+                pinMode(i * 8 + j, (~mode >> j) & 0x01);
+                digitalWrite(i * 8 + j, (~state >> j) & 0x01);
+            }
+        }
     }
-  }
 #endif
 }
 
-RemoteObject::~RemoteObject() {
-}
+RemoteObject::~RemoteObject() {}
 
 void RemoteObject::SendByte(const uint8_t b) {
 #ifndef AVR
-  const char* function_name = "SendByte()";
+    const char* function_name = "SendByte()";
 #endif
-  if(b==FRAME_BOUNDARY || b==CONTROL_ESCAPE) {
+    if (b == FRAME_BOUNDARY || b == CONTROL_ESCAPE) {
 #ifndef AVR
-    LogMessage(str(format("write escape (0x%0X)") % (int)b).c_str(), function_name);
+        LogMessage(str(format("write escape (0x%0X)") % (int)b).c_str(),
+                              function_name);
 #endif
-    Serial.write(CONTROL_ESCAPE);
-    Serial.write(b^ESCAPE_XOR);
-  } else {
+        Serial.write(CONTROL_ESCAPE);
+        Serial.write(b ^ ESCAPE_XOR);
+    } else {
 #ifndef AVR
-    LogMessage(str(format("write (0x%0X)") % (int)b).c_str(), function_name);
+        LogMessage(str(format("write (0x%0X)") % (int)b).c_str(),
+                              function_name);
 #endif
-    Serial.write(b);
-  }
+        Serial.write(b);
+    }
 }
 
 uint16_t RemoteObject::UpdateCrc(uint16_t crc, uint8_t data) {
@@ -319,27 +320,35 @@ uint8_t RemoteObject::ValidateReply(const uint8_t cmd) {
 }
 
 void RemoteObject::ProcessPacket() {
-  if(packet_cmd_&0x80) { // Commands have MSB==1
-    packet_cmd_ = packet_cmd_^0x80; // Flip the MSB for reply
-    return_code_ = RETURN_UNKNOWN_COMMAND;
-    ProcessCommand(packet_cmd_^0x80);
-  #ifndef AVR
-    LogSeparator();
-  #endif
-  } else {
-    return_code_ = payload_[payload_length_-1];
-    payload_length_--;// -1 because we've already read the return code
+    if (packet_cmd_ & 0x80) {
+        /* Commands have MSB == 1, so this packet contains a command.  Start
+         * preparing the response and process the command. */
+
+        // Flip the MSB for reply
+        packet_cmd_ = packet_cmd_ ^ 0x80;
+        return_code_ = RETURN_UNKNOWN_COMMAND;
+        ProcessCommand(packet_cmd_ ^ 0x80);
 #ifndef AVR
-    const char* function_name = "ProcessPacket()";
-    LogMessage(str(format("(0x%0X). This packet is a reply to command (%d)") %
-      (packet_cmd_^0x80) % (packet_cmd_^0x80)).c_str(), function_name);
-    LogMessage(str(format("Return code=%d") % (int)return_code()).c_str(),
-      function_name);
-    LogMessage(str(format("Payload length=%d") % payload_length()).c_str(),
-      function_name);
-    LogSeparator();
+        LogSeparator();
 #endif
-  }
+    } else {
+        // This packet does not contain a command, so assume it is a response.
+        return_code_ = payload_[payload_length_ - 1];
+        /* Decrement the payload-length because we've already read the return
+         * code (which was included in the payload-length). */
+        payload_length_--;
+#ifndef AVR
+        const char* function_name = "ProcessPacket()";
+        LogMessage(str(format("(0x%0X). This packet is a reply to command "
+                              "(%d)") % (packet_cmd_ ^ 0x80) %
+                              (packet_cmd_^0x80)).c_str(), function_name);
+        LogMessage(str(format("Return code=%d") % (int)return_code()).c_str(),
+                              function_name);
+        LogMessage(str(format("Payload length=%d") % payload_length()).c_str(),
+                              function_name);
+        LogSeparator();
+#endif
+    }
 }
 
 uint8_t RemoteObject::ProcessCommand(uint8_t cmd) {
@@ -656,9 +665,10 @@ void RemoteObject::ProcessSerialInput(uint8_t byte) {
      *
      * [1]: http://en.wikipedia.org/wiki/Escape_character
      */
-    if (byte ==CONTROL_ESCAPE) {
+    if (byte == CONTROL_ESCAPE) {
 #ifndef AVR
-        LogMessage(str(format("(0x%0X) Escape") % (int)byte ).c_str(), function_name);
+        LogMessage(str(format("(0x%0X) Escape") % (int)byte).c_str(),
+                              function_name);
 #endif
         /* Update our state to indicate that we are currently processing an [escape
          * character][1] sequence and will need to return to normal processing for
@@ -672,11 +682,12 @@ void RemoteObject::ProcessSerialInput(uint8_t byte) {
         /* TODO: What does `ESCAPE_XOR` do? */
         byte ^= ESCAPE_XOR;
 #ifndef AVR
-        LogMessage(str(format("(0x%0X) Un-escaping") % (int)byte).c_str(), function_name);
+        LogMessage(str(format("(0x%0X) Un-escaping") % (int)byte).c_str(),
+                              function_name);
 #endif
     }
 
-    if (byte==FRAME_BOUNDARY && !un_escaping_) {
+    if (byte == FRAME_BOUNDARY && !un_escaping_) {
         /* The current byte marks a frame-boundary, since it matches the
          * `start_flag` or `end_flag` of the packet grammar defined in
          * `Remoteobject.h`.
@@ -694,7 +705,7 @@ void RemoteObject::ProcessSerialInput(uint8_t byte) {
 #ifndef AVR
         LogSeparator();
         LogMessage(str(format("(0x%0X) Frame Boundary") % (int)byte).c_str(),
-          function_name);
+                              function_name);
 #endif
         if(bytes_received_ > 0) {
 #ifndef AVR
@@ -713,25 +724,27 @@ void RemoteObject::ProcessSerialInput(uint8_t byte) {
             LogMessage(str(format("(0x%0X) Command byte (%d)") % (int)byte %
                                   (int)byte).c_str(), function_name);
 #endif
-            packet_cmd_=byte;
+            packet_cmd_ = byte;
             if(crc_enabled_) {
-                rx_crc_=0xFFFF; // reset the crc
+                rx_crc_ = 0xFFFF; // reset the crc
             }
-        } else if(bytes_received_==1) { // payload length
+        } else if(bytes_received_ == 1) { // payload length
             if(byte & 0x80) {
-                header_length_=3;
-                payload_length_=(byte&0x7F)<<8;
+                header_length_ = 3;
+                payload_length_ = (byte & 0x7F) << 8;
             } else {
-                header_length_=2;
-                payload_length_=byte;
+                header_length_ = 2;
+                payload_length_ = byte;
             }
         // payload length (byte 2)
-        } else if(bytes_received_==2 && header_length_==3) {
-            payload_length_+=byte;
-        } else if(bytes_received_-header_length_<payload_length_) { // payload
+        } else if(bytes_received_ == 2 && header_length_ == 3) {
+            payload_length_ += byte;
+        } else if(bytes_received_ - header_length_ < payload_length_) {
+            // payload
             // TODO: check that MAX_PAYLOAD_LENGTH isn't exceeded
-            payload_[bytes_received_-header_length_]=byte;
-        } else if(bytes_received_-header_length_<payload_length_+2) { // crc
+            payload_[bytes_received_ - header_length_] = byte;
+        } else if(bytes_received_ - header_length_ < payload_length_ + 2) {
+            // crc
         } else {
           // TODO: error
         }
@@ -817,14 +830,14 @@ void RemoteObject::ProcessSerialInput(uint8_t byte) {
     if(un_escaping_) {
         /* If we were handling the escaping of a byte, reset the escaping state
          * to resume normal packet processing. */
-        un_escaping_=false;
+        un_escaping_ = false;
     }
 }
 
 void RemoteObject::Listen() {
-  while(Serial.available()>0) {
-    ProcessSerialInput(Serial.read());
-  }
+    while(Serial.available() > 0) {
+        ProcessSerialInput(Serial.read());
+    }
 }
 
 #ifdef AVR
@@ -841,42 +854,42 @@ void RemoteObject::begin() {
 }
 
 void RemoteObject::i2c_scan() {
-  for(uint8_t i=8; i<120; i++) {
+  for (uint8_t i = 8; i < 120; i++) {
     Wire.beginTransmission(i);
-    if(Wire.endTransmission() == 0) {
-      Serial.print ("Found i2c address: ");
-      Serial.print (i, DEC);
-      Serial.print (" (0x");
-      Serial.print (i, HEX);
+    if (Wire.endTransmission() == 0) {
+      Serial.print("Found i2c address: ");
+      Serial.print(i, DEC);
+      Serial.print(" (0x");
+      Serial.print(i, HEX);
       Serial.println (")");
-      delay (1);  // maybe unneeded?
+      delay(1);  // maybe unneeded?
     }
   }
 }
 
 void RemoteObject::i2c_write(const uint8_t address, const uint8_t data) {
-  Wire.beginTransmission(address);
-  Wire.send(data);
-  Wire.endTransmission();
+    Wire.beginTransmission(address);
+    Wire.send(data);
+    Wire.endTransmission();
 }
 
 void RemoteObject::i2c_write(const uint8_t address, const uint8_t* data,
                              const uint8_t n_bytes) {
-  Wire.beginTransmission(address);
-  for(uint8_t i=0; i<n_bytes; i++) {
-    Wire.send(data[i]);
-  }
-  Wire.endTransmission();
+    Wire.beginTransmission(address);
+    for (uint8_t i = 0; i < n_bytes; i++) {
+        Wire.send(data[i]);
+    }
+    Wire.endTransmission();
 }
 
 uint8_t RemoteObject::i2c_read(const uint8_t address, uint8_t* data,
                                const uint8_t n_bytes_to_read) {
-  uint8_t n_bytes_read = 0;
-  Wire.requestFrom(address, n_bytes_to_read);
-  while(Wire.available()) {
-    data[n_bytes_read++] = Wire.receive();
-  }
-  return n_bytes_read;
+    uint8_t n_bytes_read = 0;
+    Wire.requestFrom(address, n_bytes_to_read);
+    while (Wire.available()) {
+        data[n_bytes_read++] = Wire.receive();
+    }
+    return n_bytes_read;
 }
 
 #else
