@@ -13,11 +13,11 @@ cy_config = dict(include_dirs=include_dirs, language='c++',
                  extra_compile_args=['-O3', '-Wfatal-errors'])
 
 cy_exts = [Extension('dmf_control.%s' % v, dmf_control.get_sources()
-                     + ['dmf_control/src/%s.pyx' % v], **cy_config)
+                     + ['dmf_control/%s.pyx' % v], **cy_config)
            for v in ('cDmfControlBoard', 'cRemoteObject')]
 
 utility_exts = [Extension('dmf_control.%s' % v,
-                          ['dmf_control/src/%s.pyx' % v], language='c++')
+                          ['dmf_control/%s.pyx' % v], language='c++')
                 for v in ('ArduinoConstants', )]
 
 
@@ -30,6 +30,5 @@ setup(name = "dmf_control",
     license = "GPL",
     long_description = """""",
     packages = ['dmf_control', ],
-    #package_data = {'dmf_control': 'src/*.pyx'},
     ext_modules=cythonize(utility_exts + cy_exts)
 )

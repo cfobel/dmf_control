@@ -9,6 +9,9 @@ cdef class cDmfControlBoard(cRemoteObject):
         self.thisptr = new DmfControlBoard()
         self.baseptr = <RemoteObject *>self.thisptr
 
+    def __init__(self):
+        pass
+
     def __dealloc__(self):
         del self.thisptr
 
