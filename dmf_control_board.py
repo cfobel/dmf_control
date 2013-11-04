@@ -43,7 +43,7 @@ class EepromSettingDoesNotExist(Exception):
 
 class FeedbackCalibration():
     class_version = str(Version(0,2))
-    
+
     def __init__(self, R_hv=None, C_hv=None, R_fb=None, C_fb=None, C_drop=None,
                  C_filler=None, hw_version=None):
         if R_hv:
@@ -75,7 +75,7 @@ class FeedbackCalibration():
         else:
             self.hw_version = Version(1)
         self.version = self.class_version
-        
+
     def __getstate__(self):
         """Convert numpy arrays to lists for serialization"""
         out = copy.deepcopy(self.__dict__)
@@ -129,7 +129,7 @@ class DmfControlBoard(Base, SerialDevice):
         Base.__init__(self)
         SerialDevice.__init__(self)
         self.calibration = None
-                
+
     def connect(self, port=None):
         if port:
             logger.info("Try connecting to port %s..." % port)
@@ -174,15 +174,15 @@ class DmfControlBoard(Base, SerialDevice):
         self.set_series_resistor_index(0,0)
         self.set_series_resistor_index(1,0)
         return self.RETURN_OK
-    
+
     def voltage_tolerance(self):
         return self.__voltage_tolerance
-    
+
     def set_voltage_tolerance(self, tolerance):
         data = unpack('BBBB', pack('f', tolerance))
         for i in range(0, 4):
             self.eeprom_write(self.EEPROM_VOLTAGE_TOLERANCE+i, data[i])
-    
+
     @property
     def state_of_all_channels(self):
         return np.array(Base.state_of_all_channels(self))
@@ -209,7 +209,7 @@ class DmfControlBoard(Base, SerialDevice):
 
     def set_default_pin_modes(self, pin_modes):
         self.default_pin_modes = pin_modes
-        
+
     @default_pin_modes.setter
     def default_pin_modes(self, pin_modes):
         for i in range(0,53/8+1):
@@ -218,7 +218,7 @@ class DmfControlBoard(Base, SerialDevice):
                 if i*8+j<=53:
                     mode += pin_modes[i*8+j]<<j
             self.eeprom_write(self.EEPROM_PIN_MODE_ADDRESS+i,~mode&0xFF)
-            
+
     @property
     def default_pin_states(self):
         pin_states = []
@@ -231,7 +231,7 @@ class DmfControlBoard(Base, SerialDevice):
 
     def set_default_pin_states(self, pin_states):
         self.default_pin_states = pin_states
-        
+
     @default_pin_states.setter
     def default_pin_states(self, pin_states):
         for i in range(0,53/8+1):
@@ -251,7 +251,7 @@ class DmfControlBoard(Base, SerialDevice):
             state_.append(int(state[i]))
         Base.measure_impedance_non_blocking(self, sampling_time_ms, n_samples,
                                             delay_between_samples_ms, state_)
-    
+
     def get_impedance_data(self):
         impedance = np.array(Base.get_impedance_data(self))
         V_hv = impedance[0::4]
@@ -273,13 +273,13 @@ class DmfControlBoard(Base, SerialDevice):
         V_fb = impedance[2::4]
         fb_resistor = impedance[3::4].astype(int)
         return (V_hv, hv_resistor, V_fb, fb_resistor)
-        
+
     def i2c_write(self, address, data):
         data_ = uint8_tVector()
         for i in range(0, len(data)):
             data_.append(int(data[i]))
         Base.i2c_write(self, address, data_)
-        
+
     def i2c_read(self, address, n_bytes_to_read):
         return np.array(Base.i2c_read(self, address, n_bytes_to_read))
 
@@ -297,7 +297,7 @@ class DmfControlBoard(Base, SerialDevice):
         except Exception, why:
             logger.info('On port %s, %s' % (port, why))
         return False
-    
+
     def flash_firmware(self, hardware_version):
         logger.info("[DmfControlBoard].flash_firmware()")
         reconnect = self.connected()
@@ -373,7 +373,7 @@ class DmfControlBoard(Base, SerialDevice):
             return self.EEPROM_CONFIG_SETTINGS+8
         else:
             raise EepromSettingDoesNotExist()
-    
+
     @property
     def EEPROM_SIGNAL_GENERATOR_BOARD_I2C_ADDRESS(self):
         hardware_version = self.hardware_version()
